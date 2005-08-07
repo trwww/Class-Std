@@ -11,7 +11,6 @@ my $builder = Module::Build->new(
         'Test::More'   => 0,
         'version'      => 0,
         'Scalar::Util' => 0,
-        'List::Util'   => 0,
         'Data::Dumper' => 0,
     },
     add_to_cleanup      => [ 'Class-Std-*' ],

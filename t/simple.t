@@ -119,3 +119,19 @@ is $derobj->get_rank(), 'new rank'      => 'Der rank write accessor';
 eval { $derobj->setname('new name') };
 ok $@ =~ m/\ACan't locate object method "setname" via package "Der"/
                                         => 'Read only name attribute';
+
+my $der2 = Der->new({
+    name => 'MyBase::name',
+    snum => 'MyBase::snum',
+    rank => 'generic rank',
+    priv => 'generic priv',
+    MyBase => {
+        rank => 'MyBase::rank',
+        priv => 'MyBase::priv',
+    },
+    Der => {
+        snum => 0,
+        priv => 'Der::priv',
+    },
+});
+is( $der2->get_snum(), 0, 'false values allowable as attribute parameters' );

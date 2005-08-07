@@ -1,6 +1,7 @@
 package Class::Std;
 
-use version; $VERSION = qv('0.0.2');
+use version; $VERSION = qv('0.0.4');
+use strict;
 use warnings;
 use Carp;
 use Scalar::Util;
@@ -9,7 +10,7 @@ use overload;
 
 *ID = \&Scalar::Util::refaddr;
 
-my (%attribute, %cumulative, %anticumulative);
+my (%attribute, %cumulative, %anticumulative, %restricted, %private, %overload);
 
 my @exported_subs = qw(
     new
@@ -32,6 +33,7 @@ sub import {
 
 sub _find_sub {
     my ($package, $sub_ref) = @_;
+    no strict 'refs';
     for my $name (keys %{$package.'::'}) {
         my $candidate = *{$package.'::'.$name}{CODE};
         return $name if $candidate && $candidate == $sub_ref;
@@ -55,7 +57,7 @@ sub _extractor_for_pair_named {
     my ($key) = @_;
 
     $key = qr{\Q$key\E};
-    $str_key = _str($key);
+    my $str_key = _str($key);
 
     my $matcher = qr{ :$key<  \s* ([^>]*) \s* >
                     | :$key«  \s* ([^»]*) \s* »
@@ -81,11 +83,13 @@ sub MODIFY_HASH_ATTRIBUTES {
             $init_arg = _extract_init_arg($config);
 
             if ($getter = _extract_get($config)) {
+                no strict 'refs';
                 *{$package.'::get_'.$getter} = sub {
                     return $referent->{ID($_[0])};
                 }
             }
             if ($setter = _extract_set($config)) {
+                no strict 'refs';
                 *{$package.'::set_'.$setter} = sub {
                     croak "Missing new value in call to 'set_$setter' method"
                         unless @_ == 2;
@@ -120,8 +124,8 @@ sub _DUMP {
         }
     }
 
-    use Data::Dumper 'Dumper';
-    my $dump = Dumper \%dump;
+    require Data::Dumper;
+    my $dump = Data::Dumper::Dumper(\%dump);
     $dump =~ s/^.{8}//gxms;
     return $dump;
 }
@@ -129,7 +133,7 @@ sub _DUMP {
 my $STD_OVERLOADER
     = q{ package %%s;
          use overload (
-            q{%s} => sub { $_[0]->$referent(ident $_[0]) },
+            q{%s} => sub { $_[0]->$method($_[0]->ident()) },
             fallback => 1
          );
        };
@@ -145,26 +149,25 @@ my %OVERLOADER_FOR = (
     CODIFY    => sprintf( $STD_OVERLOADER, q{&{}}  ),
 );
 
-use List::Util qw( first );
-use Scalar::Util;
-
 sub MODIFY_CODE_ATTRIBUTES {
     my ($package, $referent, @attrs) = @_;
     for my $attr (@attrs) {
         if ($attr eq 'CUMULATIVE') {
-            undef $attr;
             push @{$cumulative{$package}}, $referent;
         }
         elsif ($attr =~ m/\A CUMULATIVE \s* [(] \s* BASE \s* FIRST \s* [)] \z/xms) {
-            undef $attr;
             push @{$anticumulative{$package}}, $referent;
         }
-        elsif (first {$attr eq $_} keys %OVERLOADER_FOR) {
-            local $^W;
-            eval sprintf $OVERLOADER_FOR{$attr}, ($package)x2;
-            die "Internal error: $@" if $@;
-            undef $attr;
+        elsif ($attr =~ m/\A RESTRICTED \z/xms) {
+            push @{$restricted{$package}}, $referent;
         }
+        elsif ($attr =~ m/\A PRIVATE \z/xms) {
+            push @{$private{$package}}, $referent;
+        }
+        elsif (exists $OVERLOADER_FOR{$attr}) {
+            push @{$overload{$package}}, [$referent, $attr];
+        }
+        undef $attr;
     }
     return grep {defined} @attrs;
 }
@@ -175,6 +178,8 @@ sub _hierarchy_of {
     my ($class) = @_;
 
     return @{$_hierarchy_of{$class}} if exists $_hierarchy_of{$class};
+
+    no strict 'refs';
 
     my @hierarchy = $class;
     my @parents   = @{$class.'::ISA'};
@@ -200,6 +205,8 @@ sub _reverse_hierarchy_of {
     return @{$_reverse_hierarchy_of{$class}}
         if exists $_reverse_hierarchy_of{$class};
 
+    no strict 'refs';
+
     my @hierarchy = $class;
     my @parents   = reverse @{$class.'::ISA'};
 
@@ -219,28 +226,67 @@ sub _reverse_hierarchy_of {
 CHECK {
     my (%cumulative_named, %anticumulative_named);
 
+    # Implement restricted methods (only callable within hierarchy)...
+    for my $package (keys %restricted) {
+        for my $sub_ref (@{$restricted{$package}}) {
+            my $name = _find_sub($package, $sub_ref);
+            no warnings 'redefine';
+            no strict 'refs';
+            my $sub_name = $package.'::'.$name;
+            my $original = *{$sub_name}{CODE}
+                or croak "Restricted method ${package}::$name() declared ",
+                         'but not defined';
+            *{$sub_name} = sub {
+                my $caller = caller;
+                goto &{$original} if $caller->isa($package)
+                                  || $package->isa($caller);
+                croak "Can't call restricted method $sub_name() from class $caller";
+            }
+        }
+    }
+
+    # Implement private methods (only callable from class itself)...
+    for my $package (keys %private) {
+        for my $sub_ref (@{$private{$package}}) {
+            my $name = _find_sub($package, $sub_ref);
+            no warnings 'redefine';
+            no strict 'refs';
+            my $sub_name = $package.'::'.$name;
+            my $original = *{$sub_name}{CODE}
+                or croak "Private method ${package}::$name() declared ",
+                         'but not defined';
+            *{$sub_name} = sub {
+                my $caller = caller;
+                goto &{$original} if $caller eq $package;
+                croak "Can't call private method $sub_name() from class $caller";
+            }
+        }
+    }
+
     for my $package (keys %cumulative) {
         for my $sub_ref (@{$cumulative{$package}}) {
             my $name = _find_sub($package, $sub_ref);
             $cumulative_named{$name}{$package} = $sub_ref;
             no warnings 'redefine';
+            no strict 'refs';
             *{$package.'::'.$name} = sub {
+                my @args = @_;
                 my $class = ref($_[0]) || $_[0];
                 my $list_context = wantarray; 
-                my (@result, @classes);
+                my (@results, @classes);
                 for my $parent (_hierarchy_of($class)) {
                     my $sub_ref = $cumulative_named{$name}{$parent} or next;
-                    ${$parent.'::AUTOLOAD'} = $AUTOLOAD if $name eq 'AUTOLOAD';
+                    ${$parent.'::AUTOLOAD'} = our $AUTOLOAD if $name eq 'AUTOLOAD';
                     if (!defined $list_context) {
-                        &{$sub_ref};
+                        $sub_ref->(@args);
                         next;
                     }
                     push @classes, $parent;
                     if ($list_context) {
-                        push @results, &{$sub_ref};
+                        push @results, $sub_ref->(@args);
                     }
                     else {
-                        push @results, scalar &{$sub_ref};
+                        push @results, scalar $sub_ref->(@args);
                     }
                 }
                 return if !defined $list_context;
@@ -260,7 +306,7 @@ CHECK {
                 for my $other_package (keys %{$cumulative_named{$name}}) {
                     next unless $other_package->isa($package)
                              || $package->isa($other_package);
-                    print {STDERR}
+                    print STDERR
                         "Conflicting definitions for cumulative method",
                         " '$name'\n",
                         "(specified as :CUMULATIVE in class '$other_package'\n",
@@ -271,6 +317,7 @@ CHECK {
             }
             $anticumulative_named{$name}{$package} = $sub_ref;
             no warnings 'redefine';
+            no strict 'refs';
             *{$package.'::'.$name} = sub {
                 my $class = ref($_[0]) || $_[0];
                 my $list_context = wantarray; 
@@ -298,11 +345,23 @@ CHECK {
             };
         }
     }
+
+    for my $package (keys %overload) {
+        foreach my $operation (@{ $overload{$package} }) {
+            my ($referent, $attr) = @$operation;
+            local $^W;
+            my $method = _find_sub($package, $referent);
+            eval sprintf $OVERLOADER_FOR{$attr}, ($package)x2;
+            die "Internal error: $@" if $@;
+        }
+        delete $overload{$package};
+    }
 }
 
 sub new {
     my ($class, $arg_ref) = @_;
 
+    no strict 'refs';
     croak "Can't find class $class" if ! keys %{$class.'::'};
 
     croak "Argument to $class->new() must be hash reference"
@@ -324,17 +383,25 @@ sub new {
         # Apply init_arg and default for attributes still undefined...
         INIT:
         for my $attr_ref ( @{$attribute{$base_class}} ) {
+            next INIT if defined $attr_ref->{ref}{$new_obj_id};
+
             # Get arg from initializer list...
-            next INIT if defined $attr_ref->{ref}{$new_obj_id};
-            if (defined $attr_ref->{init_arg}) {
-                $attr_ref->{ref}{$new_obj_id} = $arg_set{$attr_ref->{init_arg}}
-                    and next INIT;
+            if (defined $attr_ref->{init_arg}
+                && exists $arg_set{$attr_ref->{init_arg}}) {
+                $attr_ref->{ref}{$new_obj_id} = $arg_set{$attr_ref->{init_arg}};
 
+                next INIT;
             }
+            elsif (defined $attr_ref->{default}) {
+                # Or use default value specified...
+                $attr_ref->{ref}{$new_obj_id} = eval $attr_ref->{default};
 
-            # Or use default value specified...
-            $attr_ref->{ref}{$new_obj_id} = $attr_ref->{default};
-            next INIT if defined $attr_ref->{ref}{$new_obj_id};
+                if ($@) {
+                    $attr_ref->{ref}{$new_obj_id} = $attr_ref->{default};
+                }
+
+                next INIT;
+            }
 
             if (defined $attr_ref->{init_arg}) {
                 # Record missing init_arg...
@@ -379,6 +446,7 @@ sub DESTROY {
     push @_, $id;
 
     DEMOLISH: for my $base_class (_hierarchy_of(ref $_[0])) {
+        no strict 'refs';
         if (my $demolish_ref = *{$base_class.'::DEMOLISH'}{CODE}) {
             &{$demolish_ref};
         }
@@ -392,12 +460,13 @@ sub DESTROY {
 sub AUTOLOAD {
     my ($invocant) = @_;
     my $invocant_class = ref $invocant || $invocant;
-    my ($package_name, $method_name) = $AUTOLOAD =~ m/ (.*) :: (.*) /xms;
+    my ($package_name, $method_name) = our $AUTOLOAD =~ m/ (.*) :: (.*) /xms;
 
     my $ident = ID($invocant);
     if (!defined $ident) { $ident = $invocant }
 
     for my $parent_class ( _hierarchy_of($invocant_class) ) {
+        no strict 'refs';
         if (my $automethod_ref = *{$parent_class.'::AUTOMETHOD'}{CODE}) {
             local $CALLER::_ = $_;
             local $_ = $method_name;
@@ -423,6 +492,7 @@ sub AUTOLOAD {
         }
 
         for my $parent_class ( _hierarchy_of(ref $invocant || $invocant) ) {
+            no strict 'refs';
             if (my $automethod_ref = *{$parent_class.'::AUTOMETHOD'}{CODE}) {
                 local $CALLER::_ = $_;
                 local $_ = $method_name;
@@ -454,7 +524,7 @@ sub new {
 }
 
 use overload (
-    q{""}  => sub { return join q{}, @{$values_of{ID($_[0])}}; },
+    q{""}  => sub { return join q{}, grep { defined $_ } @{$values_of{ID($_[0])}}; },
     q{0+}  => sub { return scalar @{$values_of{ID($_[0])}};    },
     q{@{}} => sub { return $values_of{ID($_[0])};              },
     q{%{}} => sub {
@@ -476,7 +546,7 @@ Class::Std - Support for creating standard "inside-out" classes
 
 =head1 VERSION
 
-This document describes Class::Std version 0.0.2
+This document describes Class::Std version 0.0.4
 
 
 =head1 SYNOPSIS
@@ -1366,6 +1436,10 @@ with:
 
     # No BUILD() required
 
+Note that any valid perl datatype can be used for the default
+value:
+
+    my %customers_of :ATTR( :default([]) );
 
 =item C<< :ATTR( :get<name> ) >>
 
@@ -1451,6 +1525,71 @@ The following markers can be added to the definition of any subroutine
 used as a method within a Class::Std class
 
 =over
+
+=item C<:RESTRICTED()>
+
+=item C<:PRIVATE()>
+
+Occasionally, it is useful to be able to create subroutines that can only be
+accessed within a class's own hierarchy (that is, by derived classes). And
+sometimes it's even more useful to be able to create methods that can only be
+called within a class itself.
+
+Typically these types of methods are I<utility> methods: subroutines
+that provide some internal service for a class, or a class hierarchy.
+Class::Std supports the creation of these kinds of methods by providing two
+special markers: C<:RESTRICTED()> and C<:PRIVATE()>.
+
+Methods marked C<:RESTRICTED()> are modified at the end of the
+compilation phase so that they throw an exception when called from
+outside a class's hierarchy. Methods marked C<:PRIVATE()> are modified
+so that they throw an exception when called from outside the class in
+which they're declared.
+
+For example:
+
+    package DogTag;
+    use Class::Std;
+    {
+        my %ID_of   : ATTR;
+        my %rank_of : ATTR;
+
+        my $ID_num = 0;
+
+        sub _allocate_next_ID : RESTRICTED {
+            my ($self) = @_;
+            $ID_of{ident $self} = $ID_num++;
+            return;
+        }
+
+        sub _check_rank : PRIVATE {
+            my ($rank) = @_;
+            return $rank if $VALID_RANK{$rank};
+            croak "Unknown rank ($rank) specified";
+        }
+
+        sub BUILD {
+            my ($self, $ident, $arg_ref) = @_;
+
+            $self->_allocate_next_ID();
+            $rank_of{$ident} = _check_rank($arg_ref->{rank});
+        }
+    }
+
+Of course, this code would run exactly the same without the C<:RESTRICTED()>
+and C<:PRIVATE()> markers, but they ensure that any attempt to call the two
+subroutines inappropriately:
+
+    package main;
+
+    my $dogtag = DogTag->new({ rank => 'PFC' });
+
+    $dogtag->_allocate_next_ID();
+
+is suitably punished:
+
+    Can't call restricted method DogTag::_allocate_next_ID() from class main
+
 
 =item C<:CUMULATIVE()>
 
@@ -1865,6 +2004,32 @@ You attempted to call a method on an object but no such method is defined
 anywhere in the object's class hierarchy. Did you misspell the method name, or
 perhaps misunderstand which class the object belongs to?
 
+=item %s method %s declared but not defined
+
+A method was declared with a C<:RESTRICTED> or C<:PRIVATE>, like so:
+
+    sub foo :RESTRICTED;
+    sub bar :PRIVATE;
+
+But the actual subroutine was not defined by the end of the compilation
+phase, when the module needed it so it could be rewritten to restrict or
+privatize it.
+
+
+=item Can't call restricted method %s from class %s
+
+The specified method was declared with a C<:RESTRICTED> marker but
+subsequently called from outside its class hierarchy. Did you call the
+wrong method, or the right method from the wrong place?
+
+
+=item Can't call private method %s from class %s
+
+The specified method was declared with a C<:PRIVATE> marker but
+subsequently called from outside its own class. Did you call the wrong
+method, or the right method from the wrong place?
+
+
 =item Internal error: %s
 
 Your code is okay, but it uncovered a bug in the Class::Std module.
@@ -1891,10 +2056,6 @@ version
 =item *
 
 Scalar::Util
-
-=item *
-
-List::Util
 
 =item *
 

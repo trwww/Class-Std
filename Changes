@@ -8,3 +8,23 @@ Revision history for Class-Std
 
     - Full documentation
     - First public release
+
+
+0.0.3  Sun Aug  7 04:17:42 2005
+
+    - Removed t/lazy.t
+
+    - Fixed bug in initializing attributes with false values
+      (thanks chromatic!)
+
+    - Fixed bugs in CUMULATIVE methods (thanks Dan!)
+
+    - Added much better handling of defaults (thanks Dan!)
+
+    - Added :RESTRICTED and :PRIVATE methods (thanks for the idea Paul)
+
+    - Patched coercions to allow them to act polymorphically (thanks Andrew!)
+
+
+0.0.4  Sun Aug  7 04:19:22 2005
+       No changes logged
