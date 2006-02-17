@@ -1,6 +1,6 @@
 package Class::Std;
 
-use version; $VERSION = qv('0.0.4');
+use version; $VERSION = qv('0.0.7');
 use strict;
 use warnings;
 use Carp;
@@ -8,26 +8,44 @@ use Scalar::Util;
 
 use overload;
 
-*ID = \&Scalar::Util::refaddr;
+BEGIN { *ID = \&Scalar::Util::refaddr; }
 
 my (%attribute, %cumulative, %anticumulative, %restricted, %private, %overload);
 
 my @exported_subs = qw(
     new
     DESTROY
-    MODIFY_HASH_ATTRIBUTES
-    MODIFY_CODE_ATTRIBUTES
     AUTOLOAD
     _DUMP
+);
+
+my @exported_extension_subs = qw(
+    MODIFY_HASH_ATTRIBUTES
+    MODIFY_CODE_ATTRIBUTES
 );
 
 sub import {
     my $caller = caller;
 
+    use Smart::Comments;
+
     no strict 'refs';
     *{ $caller . '::ident'   } = \&Scalar::Util::refaddr;
     for my $sub ( @exported_subs ) {
         *{ $caller . '::' . $sub } = \&{$sub};
+    }
+    for my $sub ( @exported_extension_subs ) {
+        my $target = $caller . '::' . $sub;
+        my $real_sub = *{ $target }{CODE} || sub { return @_[2..$#_] };
+        no warnings 'redefine';
+        *{ $target } = sub {
+            my ($package, $referent, @unhandled) = @_;
+            for my $handler ($sub, $real_sub) {
+                next if !@unhandled;
+                @unhandled = $handler->($package, $referent, @unhandled);
+            }
+            return @unhandled;
+        };
     }
 }
 
@@ -41,6 +59,15 @@ sub _find_sub {
     croak q{Can't make anonymous subroutine cumulative};
 }
 
+sub _raw_str {
+    my ($pat) = @_;
+    return qr{ ('$pat') | ("$pat")
+             | qq? (?:
+                     /($pat)/ | \{($pat)\} | \(($pat)\) | \[($pat)\] | <($pat)>
+                   )
+             }xms;
+}
+
 sub _str {
     my ($pat) = @_;
     return qr{ '($pat)' | "($pat)"
@@ -50,45 +77,52 @@ sub _str {
              }xms;
 }
 
-my $STR = _str( qr{(.*?)} );
-my $NUM = qr{ ( [-+]? (?:\d+\.?\d*|\.\d+) (?:[eE]\d+)? ) }xms;
-
 sub _extractor_for_pair_named {
-    my ($key) = @_;
+    my ($key, $raw) = @_;
 
     $key = qr{\Q$key\E};
     my $str_key = _str($key);
 
+    my $LDAB = "(?:\x{AB})";
+    my $RDAB = "(?:\x{BB})";
+
+    my $STR = $raw ? _raw_str( qr{.*?} ) : _str( qr{.*?} );
+    my $NUM = qr{ ( [-+]? (?:\d+\.?\d*|\.\d+) (?:[eE]\d+)? ) }xms;
+
     my $matcher = qr{ :$key<  \s* ([^>]*) \s* >
-                    | :$key«  \s* ([^»]*) \s* »
-                    | :$key\( \s*  (?:$STR | $NUM)   \s* \)
+                    | :$key$LDAB  \s* ([^$RDAB]*) \s* $RDAB
+                    | :$key\( \s*  (?:$STR | $NUM )   \s* \)
                     | (?: $key | $str_key ) \s* => \s* (?: $STR | $NUM )
                     }xms;
 
     return sub { return $_[0] =~ $matcher ? $+ : undef };
 }
 
-*_extract_default  = _extractor_for_pair_named('default');
-*_extract_init_arg = _extractor_for_pair_named('init_arg');
-*_extract_get      = _extractor_for_pair_named('get');
-*_extract_set      = _extractor_for_pair_named('set');
+BEGIN {
+    *_extract_default  = _extractor_for_pair_named('default','raw');
+    *_extract_init_arg = _extractor_for_pair_named('init_arg');
+    *_extract_get      = _extractor_for_pair_named('get');
+    *_extract_set      = _extractor_for_pair_named('set');
+    *_extract_name     = _extractor_for_pair_named('name');
+}
 
 sub MODIFY_HASH_ATTRIBUTES {
     my ($package, $referent, @attrs) = @_;
     for my $attr (@attrs) {
-        next if $attr !~ m/\A ATTRS? \s* (?:[(] (.*) [)] )? \z/xms;
-        my ($default, $init_arg, $getter, $setter);
+        next if $attr !~ m/\A ATTRS? \s* (?: \( (.*) \) )? \z/xms;
+        my ($default, $init_arg, $getter, $setter, $name);
         if (my $config = $1) {
             $default  = _extract_default($config);
-            $init_arg = _extract_init_arg($config);
+            $name     = _extract_name($config);
+            $init_arg = _extract_init_arg($config) || $name;
 
-            if ($getter = _extract_get($config)) {
+            if ($getter = _extract_get($config) || $name) {
                 no strict 'refs';
                 *{$package.'::get_'.$getter} = sub {
                     return $referent->{ID($_[0])};
                 }
             }
-            if ($setter = _extract_set($config)) {
+            if ($setter = _extract_set($config) || $name) {
                 no strict 'refs';
                 *{$package.'::set_'.$setter} = sub {
                     croak "Missing new value in call to 'set_$setter' method"
@@ -105,7 +139,7 @@ sub MODIFY_HASH_ATTRIBUTES {
             ref      => $referent,
             default  => $default,
             init_arg => $init_arg,
-            name     => $init_arg || $getter || $setter || '????',
+            name     => $name || $init_arg || $getter || $setter || '????',
         };
     }
     return grep {defined} @attrs;
@@ -133,7 +167,7 @@ sub _DUMP {
 my $STD_OVERLOADER
     = q{ package %%s;
          use overload (
-            q{%s} => sub { $_[0]->$method($_[0]->ident()) },
+            q{%s} => sub { $_[0]->%%s($_[0]->ident()) },
             fallback => 1
          );
        };
@@ -223,7 +257,18 @@ sub _reverse_hierarchy_of {
                        } grep !$seen{$_}++, @hierarchy;
 }
 
-CHECK {
+{
+    no warnings qw( void );
+    CHECK { initialize() }
+}
+
+sub initialize {
+    # Short-circuit if nothing to do...
+    return if keys(%restricted) + keys(%private)
+            + keys(%cumulative) + keys(%anticumulative)
+            + keys(%overload)
+                == 0;
+
     my (%cumulative_named, %anticumulative_named);
 
     # Implement restricted methods (only callable within hierarchy)...
@@ -237,9 +282,13 @@ CHECK {
                 or croak "Restricted method ${package}::$name() declared ",
                          'but not defined';
             *{$sub_name} = sub {
-                my $caller = caller;
-                goto &{$original} if $caller->isa($package)
-                                  || $package->isa($caller);
+                my $caller;
+                my $level = 0;
+                while ($caller = caller($level++)) {
+                     last if $caller !~ /^(?: Class::Std | attributes )$/xms;
+                }
+                goto &{$original} if !$caller || $caller->isa($package)
+                                              || $package->isa($caller);
                 croak "Can't call restricted method $sub_name() from class $caller";
             }
         }
@@ -351,15 +400,23 @@ CHECK {
             my ($referent, $attr) = @$operation;
             local $^W;
             my $method = _find_sub($package, $referent);
-            eval sprintf $OVERLOADER_FOR{$attr}, ($package)x2;
+            eval sprintf $OVERLOADER_FOR{$attr}, $package, $method;
             die "Internal error: $@" if $@;
         }
-        delete $overload{$package};
     }
+
+    # Remove initialization data to prevent re-initializations...
+    %restricted     = ();
+    %private        = ();
+    %cumulative     = ();
+    %anticumulative = ();
+    %overload       = ();
 }
 
 sub new {
     my ($class, $arg_ref) = @_;
+
+    Class::Std::initialize();   # Ensure run-time (and mod_perl) setup is done
 
     no strict 'refs';
     croak "Can't find class $class" if ! keys %{$class.'::'};
@@ -372,12 +429,17 @@ sub new {
     my (@missing_inits, @suss_keys);
 
     $arg_ref ||= {};
+    my %arg_set;
     BUILD: for my $base_class (_reverse_hierarchy_of($class)) {
-        my %arg_set = ( %{$arg_ref}, %{$arg_ref->{$base_class}||{}} );
+        my $arg_set = $arg_set{$base_class}
+            = { %{$arg_ref}, %{$arg_ref->{$base_class}||{}} };
 
         # Apply BUILD() methods...
-        if (my $build_ref = *{$base_class.'::BUILD'}{CODE}) {
-            $build_ref->($new_obj, $new_obj_id, \%arg_set);
+        {
+            no warnings 'once';
+            if (my $build_ref = *{$base_class.'::BUILD'}{CODE}) {
+                $build_ref->($new_obj, $new_obj_id, $arg_set);
+            }
         }
 
         # Apply init_arg and default for attributes still undefined...
@@ -387,8 +449,8 @@ sub new {
 
             # Get arg from initializer list...
             if (defined $attr_ref->{init_arg}
-                && exists $arg_set{$attr_ref->{init_arg}}) {
-                $attr_ref->{ref}{$new_obj_id} = $arg_set{$attr_ref->{init_arg}};
+                && exists $arg_set->{$attr_ref->{init_arg}}) {
+                $attr_ref->{ref}{$new_obj_id} = $arg_set->{$attr_ref->{init_arg}};
 
                 next INIT;
             }
@@ -408,15 +470,28 @@ sub new {
                 push @missing_inits, 
                      "Missing initializer label for $base_class: "
                      . "'$attr_ref->{init_arg}'.\n";
-                push @suss_keys, keys %arg_set;
+                push @suss_keys, keys %{$arg_set};
             }
         }
     }
 
-    croak @missing_inits,
-          _mislabelled(@suss_keys),
+    croak @missing_inits, _mislabelled(@suss_keys),
           'Fatal error in constructor call'
                 if @missing_inits;
+
+    # START methods run after all BUILD methods complete...
+    START:
+    for my $base_class (_reverse_hierarchy_of($class)) {
+        my $arg_set = $arg_set{$base_class};
+
+        # Apply START() methods...
+        {
+            no warnings 'once';
+            if (my $init_ref = *{$base_class.'::START'}{CODE}) {
+                $init_ref->($new_obj, $new_obj_id, $arg_set);
+            }
+        }
+    }
 
     return $new_obj;
 }
@@ -483,12 +558,12 @@ sub AUTOLOAD {
 
 {
     my $real_can = \&UNIVERSAL::can;
-    no warnings 'redefine';
+    no warnings 'redefine', 'once';
     *UNIVERSAL::can = sub {
         my ($invocant, $method_name) = @_;
 
-        if (my $method_impl = $real_can->(@_)) {
-            return $method_impl;
+        if (my $sub_ref = $real_can->(@_)) {
+            return $sub_ref;
         }
 
         for my $parent_class ( _hierarchy_of(ref $invocant || $invocant) ) {
@@ -509,7 +584,7 @@ sub AUTOLOAD {
 package Class::Std::SCR;
 use base qw( Class::Std );
 
-*ID = \&Scalar::Util::refaddr;
+BEGIN { *ID = \&Scalar::Util::refaddr; }
 
 my %values_of  : ATTR( :init_arg<values> );
 my %classes_of : ATTR( :init_arg<classes> );
@@ -546,7 +621,7 @@ Class::Std - Support for creating standard "inside-out" classes
 
 =head1 VERSION
 
-This document describes Class::Std version 0.0.4
+This document describes Class::Std version 0.0.7
 
 
 =head1 SYNOPSIS
@@ -567,7 +642,7 @@ This document describes Class::Std version 0.0.4
 
         $name{$obj_ID} = check_name( $arg_ref->{name} );
         $rank{$obj_ID} = check_rank( $arg_ref->{rank} );
-        $snum{$obj_ID} = check_name( _gen_uniq_serial_num() );
+        $snum{$obj_ID} = _gen_uniq_serial_num();
     }
 
     # Handle cleanup of objects of this class...
@@ -585,7 +660,7 @@ This document describes Class::Std version 0.0.4
         if ( m/\A get_(.*)/ ) {  # Method name passed in $_
             my $get_what = $1;
             return sub {
-                return $public_data{$ident}{$get_what};
+                return $public_data{$obj_ID}{$get_what};
             }
         }
 
@@ -598,7 +673,7 @@ This document describes Class::Std version 0.0.4
 =head1 DESCRIPTION
 
 This module provides tools that help to implement the "inside out object"
-class structure.
+class structure in a convenient and standard way.
 
 I<Portions of the following code and documentation from "Perl Best Practices"
 copyright (c) 2005 by O'Reilly Media, Inc. and reprinted with permission.>
@@ -979,6 +1054,24 @@ returns a unique integer ID for any object passed to it.
 
 =back
 
+=head2 Non-exported subroutines
+
+=over 
+
+=item C<Class::Std::initialize()>
+
+This subroutine sets up all the infrastructure to support your Class::Std-
+based class. It is usually called automatically in a C<CHECK> block, or
+(if the C<CHECK> block fails to run -- under C<mod_perl> or C<require
+Class::Std> or C<eval "...">) during the first constructor call made to
+a Class::Std-based object.
+
+In rare circumstances, you may need to call this subroutine directly yourself.
+Specifically, if you set up cumulative, restricted, private, or automethodical
+class methods (see below), and call any of them before you create any objects,
+then you need to call C<Class::Std::initialize()> first.
+
+=back
 
 =head2 Methods created automatically
 
@@ -999,13 +1092,13 @@ object. This argument must be a hash reference.
 
     $obj = MyClass->new({ name=>'Foo', location=>'bar' });
 
-See the subsequent descriptions of the C<BUILD()> method and C<:ATTR()>
-trait, for an explanation of how the contents of this optional hash can
-be used to initialize the object.
+See the subsequent descriptions of the C<BUILD()> and C<START()> methods
+and C<:ATTR()> trait, for an explanation of how the contents of this
+optional hash can be used to initialize the object.
 
 It is almost always an error to implement your own C<new()> in any class
-that uses Class::Std. You almost certainly want to write a C<BUILD()> method
-instead. See below.
+that uses Class::Std. You almost certainly want to write a C<BUILD()> or
+C<START()> method instead. See below.
 
 
 =item C<DESTROY()>
@@ -1036,6 +1129,10 @@ attribute values) of the object on which it's called. Only those attributes
 which are marked with an C<:ATTR> (see below) are reported. Attribute names
 are reported only if they can be ascertained from an C<:init_arg>, C<:get>, or
 C<:set> option within the C<:ATTR()>.
+
+Note that C<_DUMP()> is not designed to support full
+serialization/deserialization of objects. See the separate
+Class::Std::Storable module (on CPAN) for that.
 
 =back
 
@@ -1228,6 +1325,32 @@ Also see the C<:ATTR()> marker (described below) for a simpler way of
 initializing attributes.
 
 
+=item C<START()>
+
+Once all the C<BUILD()> methods of a class have been called and any
+initialization values or defaults have been subsequently applied to
+uninitialized attributes, Class::Std arranges for any C<START()> methods
+in the class's hierarchy to be called befre the constructor finishes.
+That is, after the build and default initialization processes are
+complete, the constructor walks down the class's inheritance tree a
+second time and calls every C<START()> method it finds along the way.
+
+As with C<BUILD()>, each C<START()> method is called with three arguments:
+the invocant object, the identifier number of that object, and a
+reference to (a customized version of) the hash of arguments that was
+originally passed to the constructor.
+
+The main difference between a C<BUILD()> method and a C<START()> method
+is that a C<BUILD()> method runs before any attribute of the class is
+auto-initialized or default-initialized, whereas a C<START()> method
+runs after all the attributes of the class (including attributes in derived
+classes) have been initialized in some way. So if you want to pre-empt
+the initialization process, write a C<BUILD()>. But if you want to do
+something with the newly created and fully initialized object, write a
+C<START()> instead. Of course, any class can define I<both> a C<BUILD()>
+and a C<START()> method, if that happens to be appropriate.
+
+
 =item C<DEMOLISH()>
 
 The C<DESTROY()> method that is automatically provided by Class::Std ensures
@@ -1389,6 +1512,10 @@ key/value pair, which may be specified in either Perl 5 "fat comma" syntax
 ( C<< S<< :key<value> >> >> or C<< S<< :key('value') >> >> or 
 C<< S<< :key«value» >> >>).
 
+Note that, due to a limitation in Perl itself, the complete C<:ATTR> marker,
+including its options must appear on a single line.
+interpolate variables into the option values
+
 =over
 
 =item C<< :ATTR( :init_arg<initializer_key> ) >>
@@ -1436,10 +1563,26 @@ with:
 
     # No BUILD() required
 
-Note that any valid perl datatype can be used for the default
-value:
+Note that only literal strings and numbers can be used as default values. A
+common mistake is to write:
 
-    my %customers_of :ATTR( :default([]) );
+    my %seen_of :ATTR( :default($some_variable) );
+
+But variables like this aren't interpolated into C<:ATTR> markers (this is a
+limitation of Perl, not Class::Std).
+
+If your attribute needs something more complex, you will have to default
+initialize it in a C<START()> method:
+
+    my %seen_of :ATTR;
+
+    sub START {
+        my ($self, $id, $args_ref) = @_;
+
+        if (!defined $seen_of{$id}) {
+            $seen_of{$id} = $some_variable;
+        }
+    }
 
 =item C<< :ATTR( :get<name> ) >>
 
@@ -1493,17 +1636,22 @@ a combined "getter/setter" accessor. See Chapter 15 of I<Perl Best
 Practices> (O'Reilly, 2005) for a full discussion on why accessors
 should be named and implemented this way.
 
+=item C<< :ATTR( :name<name> ) >>
+
+Specifying the C<:name> option is merely a convenient 
+shorthand for specifying all three of C<:get>, C<:set>, and C<:init_arg>.
+
 =back
 
 You can, of course, specify two or more arguments in a single C<:ATTR()>
 specification:
 
-    my %rank_of : ATTR( :init_arg<rank>  :get<rank>  :set<rank> );
+    my %rank_of : ATTR( :init_arg<starting_rank>  :get<rank>  :set<rank> );
 
 
 =item C<:ATTRS()>
 
-This is just another name for the C<:ATTRS> marker (see above). The plural
+This is just another name for the C<:ATTR> marker (see above). The plural
 form is convenient when you want to specify a series of attribute hashes in
 the same statement:
 
@@ -2066,17 +2214,63 @@ Data::Dumper
 
 =head1 INCOMPATIBILITIES
 
-None reported.
+Incompatible with the Attribute::Handlers module, since both define
+meta-attributes named :ATTR.
 
 
 =head1 BUGS AND LIMITATIONS
 
-No bugs have been reported.
+=over
+
+=item *
+
+Does not handle threading (including C<fork()> under Windows).
+
+=item *
+
+C<:ATTR> declarations must all be on the same line (due to a limitation in
+Perl itself).
+
+=item *
+
+C<:ATTR> declarations cannot include variables, since these are not
+interpolated into the declaration (a limitation in Perl itself).
+
+=back
 
 Please report any bugs or feature requests to
 C<bug-class-std@rt.cpan.org>, or through the web interface at
 L<http://rt.cpan.org>.
 
+
+=head1 ALTERNATIVES
+
+Inside-out objects are gaining in popularity and there are now many other
+modules that implement frameworks for building inside-out classes. These
+include:
+
+=over
+
+=item Object::InsideOut
+
+Array-based objects, with support for threading. Many excellent features
+(especially thread-safety), but slightly less secure than Class::Std,
+due to non-encapsulation of attribute data addressing.
+
+=item Class::InsideOut
+
+A minimalist approach to building inside-out classes.
+
+=item Lexical::Attributes
+
+Uses source filters to provide a near-Perl 6 approach to declaring inside-out
+classes.
+
+=item Class::Std::Storable
+
+Adds serialization/deserialization to Class::Std.
+
+=back
 
 =head1 AUTHOR
 

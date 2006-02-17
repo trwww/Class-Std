@@ -1,6 +1,6 @@
 package Base1;
 use Class::Std;
-@ISA = qw( Base2 );
+BEGIN{ @ISA = qw( Base2 ); }
 {
     sub base_first :CUMULATIVE(BASE FIRST) { return __PACKAGE__ }
     sub der_first  :CUMULATIVE             { return __PACKAGE__ }

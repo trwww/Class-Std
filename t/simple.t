@@ -3,11 +3,12 @@ use Test::More 'no_plan';
 package MyBase;
 use Class::Std;
 {
-    my %name : ATTR( :init_arg<name>    :get<name>              );
-    my %rank : ATTR( init_arg => 'rank' :get<rank> :set<rank> );
+    my %name : ATTR( :init_arg<name>    :get<name>             );
+    my %rank : ATTR( init_arg => 'rank' :get<rank> :set<rank>  );
     my %snum : ATTR( :init_arg('snum')  :get<snum>             );
     my %priv : ATTR;
     my %def  : ATTR( :default<MyBase::def> :get<default>       );
+    my %dval : ATTR( :default('dval') :get<dval>               );
 
     sub BUILD {
         my ($self, $ident, $arg_ref) = @_;
@@ -135,3 +136,5 @@ my $der2 = Der->new({
     },
 });
 is( $der2->get_snum(), 0, 'false values allowable as attribute parameters' );
+
+is( $der2->get_dval, 'dval', 'default values evaled correctly' );
