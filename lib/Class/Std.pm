@@ -1,6 +1,6 @@
 package Class::Std;
 
-use version; $VERSION = qv('0.0.7');
+use version; $VERSION = qv('0.0.8');
 use strict;
 use warnings;
 use Carp;
@@ -26,8 +26,6 @@ my @exported_extension_subs = qw(
 
 sub import {
     my $caller = caller;
-
-    use Smart::Comments;
 
     no strict 'refs';
     *{ $caller . '::ident'   } = \&Scalar::Util::refaddr;
@@ -621,7 +619,7 @@ Class::Std - Support for creating standard "inside-out" classes
 
 =head1 VERSION
 
-This document describes Class::Std version 0.0.7
+This document describes Class::Std version 0.0.8
 
 
 =head1 SYNOPSIS

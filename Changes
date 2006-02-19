@@ -60,3 +60,8 @@ Revision history for Class-Std
 
     - Added Class::Std::initialize() and ctor mods to work around CHECK block
       problems in mod_perl and run-time loading.
+
+
+0.0.8  Mon Feb 20 07:04:13 2006
+
+    - Removed spurious use of Smart::Comments (thanks Patrick)
