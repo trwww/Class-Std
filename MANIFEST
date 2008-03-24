@@ -22,6 +22,7 @@ t/pod-coverage.t
 t/pod.t
 t/simple.t
 t/dump.t
+t/can.t
 t/access.t
 t/access_automethod.t
 t/access_name.t

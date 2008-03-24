@@ -1,6 +1,6 @@
 package Class::Std;
 
-use version; $VERSION = qv('0.0.8');
+use version; $VERSION = qv('0.0.9');
 use strict;
 use warnings;
 use Carp;
@@ -560,17 +560,19 @@ sub AUTOLOAD {
     *UNIVERSAL::can = sub {
         my ($invocant, $method_name) = @_;
 
-        if (my $sub_ref = $real_can->(@_)) {
-            return $sub_ref;
-        }
+        if ( defined $invocant ) {
+            if (my $sub_ref = $real_can->(@_)) {
+                return $sub_ref;
+            }
 
-        for my $parent_class ( _hierarchy_of(ref $invocant || $invocant) ) {
-            no strict 'refs';
-            if (my $automethod_ref = *{$parent_class.'::AUTOMETHOD'}{CODE}) {
-                local $CALLER::_ = $_;
-                local $_ = $method_name;
-                if (my $method_impl = $automethod_ref->(@_)) {
-                    return sub { my $inv = shift; $inv->$method_name(@_) }
+            for my $parent_class ( _hierarchy_of(ref $invocant || $invocant) ) {
+                no strict 'refs';
+                if (my $automethod_ref = *{$parent_class.'::AUTOMETHOD'}{CODE}) {
+                    local $CALLER::_ = $_;
+                    local $_ = $method_name;
+                    if (my $method_impl = $automethod_ref->(@_)) {
+                        return sub { my $inv = shift; $inv->$method_name(@_) }
+                    }
                 }
             }
         }
@@ -2267,6 +2269,43 @@ classes.
 =item Class::Std::Storable
 
 Adds serialization/deserialization to Class::Std.
+
+=back
+
+=head1 I know we're all busy, I'd like to help maintain Class::Std!
+
+First off, thanks! Here's how you can go about it:
+
+=over 4
+
+=item 1 Get fresh git (L<http://git.or.cz/>) repository
+
+   git clone http://drmuey.com/perl/class-std.git-repos/
+
+=item 2 Update your local repository with latest changes
+
+   cd ~/class-std.git-repos/
+   git pull
+
+=item 3 Guidelines for Making Changes
+
+=over 4
+
+=item * changes should have clear log message of its purpose, referencing the rt.cpan.org report number its related to (if any)
+
+=item * changes should include tests for the changes
+
+=item * your CPAN ID as author
+
+=back
+
+=item 4 Submit your changes for review and integration
+
+Send patches, as per L<http://www.kernel.org/pub/software/scm/git/docs/user-manual.html#submitting-patches>, to CPAN ID: DMUEY
+
+=item 5 Questions?
+
+Contact Dan Muey, L<http://search.cpan.org/~dmuey/>
 
 =back
 
