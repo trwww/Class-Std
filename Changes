@@ -72,3 +72,11 @@ Revision history for Class-Std
     - Added 'how can I help' POD
 
     - Applied Andreas 'ac0v' Specht patches for rt 30833
+
+
+0.010  Wed Dec 23 16:09:10 2009
+
+    - Removed git repository information (thanks for all the work, Dan)
+
+    - Fixed incompatibility with Perl 5.11+ label constraints
+      (thanks Andreas)

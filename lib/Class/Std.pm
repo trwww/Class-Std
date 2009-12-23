@@ -1,6 +1,6 @@
 package Class::Std;
 
-use version; $VERSION = qv('0.0.9');
+our $VERSION = '0.010';
 use strict;
 use warnings;
 use Carp;
@@ -441,16 +441,16 @@ sub new {
         }
 
         # Apply init_arg and default for attributes still undefined...
-        INIT:
+        INITIALIZATION:
         for my $attr_ref ( @{$attribute{$base_class}} ) {
-            next INIT if defined $attr_ref->{ref}{$new_obj_id};
+            next INITIALIZATION if defined $attr_ref->{ref}{$new_obj_id};
 
             # Get arg from initializer list...
             if (defined $attr_ref->{init_arg}
                 && exists $arg_set->{$attr_ref->{init_arg}}) {
                 $attr_ref->{ref}{$new_obj_id} = $arg_set->{$attr_ref->{init_arg}};
 
-                next INIT;
+                next INITIALIZATION;
             }
             elsif (defined $attr_ref->{default}) {
                 # Or use default value specified...
@@ -460,7 +460,7 @@ sub new {
                     $attr_ref->{ref}{$new_obj_id} = $attr_ref->{default};
                 }
 
-                next INIT;
+                next INITIALIZATION;
             }
 
             if (defined $attr_ref->{init_arg}) {
@@ -478,7 +478,6 @@ sub new {
                 if @missing_inits;
 
     # START methods run after all BUILD methods complete...
-    START:
     for my $base_class (_reverse_hierarchy_of($class)) {
         my $arg_set = $arg_set{$base_class};
 
@@ -518,7 +517,7 @@ sub DESTROY {
     my $id = ID($self);
     push @_, $id;
 
-    DEMOLISH: for my $base_class (_hierarchy_of(ref $_[0])) {
+    for my $base_class (_hierarchy_of(ref $_[0])) {
         no strict 'refs';
         if (my $demolish_ref = *{$base_class.'::DEMOLISH'}{CODE}) {
             &{$demolish_ref};
@@ -621,7 +620,7 @@ Class::Std - Support for creating standard "inside-out" classes
 
 =head1 VERSION
 
-This document describes Class::Std version 0.0.8
+This document describes Class::Std version 0.010
 
 
 =head1 SYNOPSIS
@@ -2269,43 +2268,6 @@ classes.
 =item Class::Std::Storable
 
 Adds serialization/deserialization to Class::Std.
-
-=back
-
-=head1 I know we're all busy, I'd like to help maintain Class::Std!
-
-First off, thanks! Here's how you can go about it:
-
-=over 4
-
-=item 1 Get fresh git (L<http://git.or.cz/>) repository
-
-   git clone http://drmuey.com/perl/class-std.git-repos/
-
-=item 2 Update your local repository with latest changes
-
-   cd ~/class-std.git-repos/
-   git pull
-
-=item 3 Guidelines for Making Changes
-
-=over 4
-
-=item * changes should have clear log message of its purpose, referencing the rt.cpan.org report number its related to (if any)
-
-=item * changes should include tests for the changes
-
-=item * your CPAN ID as author
-
-=back
-
-=item 4 Submit your changes for review and integration
-
-Send patches, as per L<http://www.kernel.org/pub/software/scm/git/docs/user-manual.html#submitting-patches>, to CPAN ID: DMUEY
-
-=item 5 Questions?
-
-Contact Dan Muey, L<http://search.cpan.org/~dmuey/>
 
 =back
 
