@@ -1,7 +1,6 @@
 Build.PL
 Changes
 MANIFEST
-META.yml # Will be created by "make dist"
 Makefile.PL
 README
 lib/Class/Std.pm
@@ -30,3 +29,4 @@ t/begin-coercion.t
 t/perlattrs.t
 t/runtime.t
 t/start.t
+META.yml                                 Module meta-data (added by MakeMaker)

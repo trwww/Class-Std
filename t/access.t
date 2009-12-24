@@ -55,3 +55,4 @@ ok !eval { $der_obj->personal }   => 'External derived personal failed as expect
 
 like $@, qr/Can't call private method MyDer::personal\(\) from class main/
                                       => '...with correct error message';
+

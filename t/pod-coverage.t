@@ -7,3 +7,4 @@ use Class::Std;
 all_pod_coverage_ok(
     { also_private => [ qr/^[A-Z_]+$|^uniq$/ ], },
 );
+

@@ -9,7 +9,6 @@ my $builder = Module::Build->new(
     dist_version_from   => 'lib/Class/Std.pm',
     requires => {
         'Test::More'   => 0,
-        'version'      => 0,
         'Scalar::Util' => 0,
         'Data::Dumper' => 0,
     },

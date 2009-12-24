@@ -184,3 +184,4 @@ is \*{$obj}, \*global_glob2         => 'Der5 Glob coercion';
 is \%{$obj}, \%global_hash2         => 'Der5 Hash coercion';
 is \@{$obj}, \@global_array2        => 'Der5 Array coercion';
 is \${$obj}, \$global_scalar2       => 'Der5 Scalar coercion';
+

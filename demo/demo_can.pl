@@ -32,3 +32,4 @@ if ($meth_ref = Bar->can('foo')) {
 if ($meth_ref = Qux->can('foo')) {
     Qux->$meth_ref();
 }
+

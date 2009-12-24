@@ -5,3 +5,4 @@ use_ok( 'Class::Std' );
 }
 
 diag( "Testing Class::Std $Class::Std::VERSION" );
+

@@ -146,3 +146,4 @@ my $der2 = Der->new({
 is( $der2->get_snum(), 0, 'false values allowable as attribute parameters' );
 
 is( $der2->get_dval, 'dval', 'default values evaled correctly' );
+

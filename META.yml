@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                Class-Std
-version:             0.010
+version:             0.011
 abstract:            Support for creating standard "inside-out" classes
 license:             ~
 author:              
@@ -11,7 +11,6 @@ requires:
     Data::Dumper:                  0
     Scalar::Util:                  0
     Test::More:                    0
-    version:                       0
 meta-spec:
     url:     http://module-build.sourceforge.net/META-spec-v1.3.html
     version: 1.3

@@ -46,3 +46,4 @@ is $hash->{MyBase}{'????'}, 'base priv'   => 'Private base attribute';
 
 is $hash->{MyDer}{pub}, 'der pub'         => 'Public derived attribute'; 
 is $hash->{MyDer}{'????'}, 'der priv'     => 'Private derived attribute'; 
+

@@ -11,3 +11,4 @@ local $SIG{__WARN__} = sub { push @warnings, @_; warn @_; };
 
 UNIVERSAL::can(undef, 'any');
 ok(! @warnings, 'overwritten UNIVERSAL::can throws no warnings');
+

@@ -6,3 +6,4 @@ package main;
 $obj = Foo->new();
 $obj = Bar->new();
 
+

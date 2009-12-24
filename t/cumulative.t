@@ -99,3 +99,4 @@ for my $test_run (1..2) {
 
     is_deeply \@$res_objs, \@objs             => "shift(\@_) used in method";
 }
+

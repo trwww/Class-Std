@@ -29,3 +29,4 @@ my $bool = $obj?"true\n":"false\n";
 ### $obj->()
 
 ### *{$obj}
+

@@ -87,3 +87,4 @@ ok( !$meth_ref                               => 'Qux no can foo()'     );
 eval { Qux->foo() };
 ok( $@                                       => 'No Qux foo()'         );
 
+

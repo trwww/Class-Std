@@ -80,3 +80,11 @@ Revision history for Class-Std
 
     - Fixed incompatibility with Perl 5.11+ label constraints
       (thanks Andreas)
+
+
+
+0.011  Thu Dec 24 14:06:53 2009
+
+    - Update to remove weird files in previous release
+
+    - Remove unneeded dependency on version.pm

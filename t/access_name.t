@@ -88,3 +88,4 @@ my $der2 = Der->new({
     },
 });
 is( $der2->get_sernum(), 0, 'false values allowable as attribute parameters' );
+

@@ -40,3 +40,4 @@ use base qw( MyBase );
 package main;
 
 Der->new({ attr=>86 });
+

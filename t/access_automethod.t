@@ -69,3 +69,4 @@ ok !eval { $obj->get_dbname() }    => 'Restricted AUTOMETHOD inaccessible';
 like $@, qr/Can't call restricted/ => 'Restricted AUTOMETHOD error msg';
 
 
+

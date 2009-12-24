@@ -1,6 +1,6 @@
 package Class::Std;
 
-our $VERSION = '0.010';
+our $VERSION = '0.011';
 use strict;
 use warnings;
 use Carp;
@@ -620,7 +620,7 @@ Class::Std - Support for creating standard "inside-out" classes
 
 =head1 VERSION
 
-This document describes Class::Std version 0.010
+This document describes Class::Std version 0.011
 
 
 =head1 SYNOPSIS
@@ -2309,3 +2309,5 @@ RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES OR A
 FAILURE OF THE SOFTWARE TO OPERATE WITH ANY OTHER SOFTWARE), EVEN IF
 SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF
 SUCH DAMAGES.
+
+

@@ -28,3 +28,4 @@ package main;
 my $obj = MyBase->new({name=>'mha_test'});
 
 $obj->verify();
+

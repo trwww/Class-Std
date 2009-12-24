@@ -119,3 +119,4 @@ print "Name:   ", $obj->get_name(), "\n";
 
 eval { $obj->set_patent(98765) } or print $@;
 eval { $obj->set_name() } or print $@;
+

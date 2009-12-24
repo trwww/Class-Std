@@ -30,3 +30,4 @@ print $obj->_DUMP();
 
 my $obj2 = Other->new();
 print $obj2->_DUMP();
+
