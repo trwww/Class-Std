@@ -1,6 +1,6 @@
 package Class::Std;
 
-our $VERSION = '0.011';
+our $VERSION = '0.013';
 use strict;
 use warnings;
 use Carp;
@@ -583,6 +583,8 @@ sub AUTOLOAD {
 package Class::Std::SCR;
 use base qw( Class::Std );
 
+our $VERSION = '0.013';
+
 BEGIN { *ID = \&Scalar::Util::refaddr; }
 
 my %values_of  : ATTR( :init_arg<values> );
@@ -622,7 +624,7 @@ Class::Std - Support for creating standard "inside-out" classes
 
 =head1 VERSION
 
-This document describes Class::Std version 0.011
+This document describes Class::Std version 0.013
 
 
 =head1 SYNOPSIS

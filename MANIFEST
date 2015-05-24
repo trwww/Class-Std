@@ -17,8 +17,6 @@ t/00.load.t
 t/automethod.t
 t/coercions.t
 t/cumulative.t
-t/pod-coverage.t
-t/pod.t
 t/simple.t
 t/dump.t
 t/can.t
@@ -29,4 +27,7 @@ t/begin-coercion.t
 t/perlattrs.t
 t/runtime.t
 t/start.t
+xt/pod-coverage.t
+xt/pod.t
 META.yml                                 Module meta-data (added by MakeMaker)
+META.json

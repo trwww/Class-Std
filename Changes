@@ -88,3 +88,13 @@ Revision history for Class-Std
     - Update to remove weird files in previous release
 
     - Remove unneeded dependency on version.pm
+
+0.012 2015-05-24
+
+    - pod fixed
+
+    - better META.*
+
+0.013 2015-05-24
+
+    - version in Class::Std::SCR
