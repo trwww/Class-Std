@@ -1038,7 +1038,7 @@ Indeed, the standard infrastructure of I<every> inside-out class looks
 exactly the same. So it makes sense not to have to rewrite that standard
 infrastructure code in every separate class.
 
-That's precisely what is module does: it implements the necessary
+That's precisely what this module does: it implements the necessary
 infrastructure for inside-out objects. See below.
 
 
