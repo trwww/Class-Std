@@ -613,6 +613,8 @@ use overload (
 1; # Magic true value required at end of module
 __END__
 
+=encoding ISO-8859-1
+
 =head1 NAME
 
 Class::Std - Support for creating standard "inside-out" classes
