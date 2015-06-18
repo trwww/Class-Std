@@ -1,3 +1,4 @@
+use strict;
 use Test::More 'no_plan';
 
 package MyBase;
@@ -8,7 +9,7 @@ use Class::Std;
     sub personal :PRIVATE    { return 'personal' }
 
     sub try_all {
-        $self = shift;
+        my $self = shift;
         for my $method (qw(everyone family personal)) {
             ::is $self->$method(), $method => "Called $method";
         }
