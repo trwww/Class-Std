@@ -517,6 +517,11 @@ sub DESTROY {
     my $id = ID($self);
     push @_, $id;
 
+    # if a DEMOLISH method uses eval without an exception $@ is cleared so
+    # local()ize the current exception (if any) so that it gets restored
+    # see https://rt.cpan.org/Public/Bug/Display.html?id=95834
+    local $@ = $@;
+
     for my $base_class (_hierarchy_of(ref $_[0])) {
         no strict 'refs';
         if (my $demolish_ref = *{$base_class.'::DEMOLISH'}{CODE}) {
